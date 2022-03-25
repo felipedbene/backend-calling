@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  adenApp
+
+  SAM Template for adenApp for expedite maintenance reporting
+  
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+  Api:
+    EndpointConfiguration: REGIONAL
+    Cors: "'*'"
+    Domain:
+      DomainName: api.debene.xyz
+      CertificateArn: arn:aws:acm:us-east-1:668984504585:certificate/90d148bc-6448-4cff-9ab7-7f1a6ad2dba2
+      EndpointConfiguration: EDGE
+
+Resources:
+  CallFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: app.handler
+      Runtime: nodejs14.x
+      Policies: 
+        - AWSLambdaExecute
+        - Statement:
+          - Sid: MakeConnectCall
+            Effect: Allow
+            Action:
+            - connect:StartOutboundVoiceContact
+            Resource: '*'
+      Architectures:
+        - x86_64
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /call
+            Method: post

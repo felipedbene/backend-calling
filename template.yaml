@@ -15,17 +15,32 @@ Globals:
     Domain:
       DomainName: api.debene.xyz
       CertificateArn: arn:aws:acm:us-east-1:668984504585:certificate/90d148bc-6448-4cff-9ab7-7f1a6ad2dba2
-      EndpointConfiguration: EDGE
+      EndpointConfiguration: REGIONAL
 
 Resources:
+  CallsLogs:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: ContactId
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: ContactId
+          KeyType: HASH
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
   CallFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       CodeUri: src/
-      Handler: app.handler
-      Runtime: nodejs14.x
+      Handler: makeCall.handler
+      Runtime: python3.6
       Policies: 
         - AWSLambdaExecute
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallsLogs
         - Statement:
           - Sid: MakeConnectCall
             Effect: Allow
@@ -34,9 +49,103 @@ Resources:
             Resource: '*'
       Architectures:
         - x86_64
+      MemorySize: 160
+      Environment:
+        Variables:
+          tableName : !Ref CallsLogs
       Events:
         HelloWorld:
           Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
           Properties:
             Path: /call
             Method: post
+  LogCallFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: callLogger.handler
+      Runtime: python3.6
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBWritePolicy :
+            TableName: !Ref CallsLogs
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Environment:
+        Variables:
+          tableName : !Ref CallsLogs
+  AckCallFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: callAcker.handler
+      Runtime: python3.6
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBWritePolicy :
+            TableName: !Ref CallsLogs
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Environment:
+        Variables:
+          tableName : !Ref CallsLogs
+  IsCallAckedFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: callAcked.handler
+      Runtime: python3.6
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBReadPolicy :
+            TableName: !Ref CallsLogs
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Environment:
+        Variables:
+          tableName : !Ref CallsLogs
+  ConnectLambdaFunctionPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: AckCallFunction
+    Properties:
+      FunctionName: !Ref AckCallFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: 'connect.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: arn:aws:connect:us-east-1:668984504585:instance/40f62289-8adf-4f1a-b934-328736bd08de
+  # ApiDNSRecord:
+  #   Type: AWS::Route53::RecordSet
+  #   Properties:
+  #     HostedZoneId: Z02456093FJS6ORLNM5I6
+  #     Name: api.debene.xyz.
+  #     Type: A
+  #     TTL: '60'
+  #     # AliasTarget:
+  #     #   HostedZoneId: Z02456093FJS6ORLNM5I6
+  #     #   DNSName: !Sub "${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com"
+  #     AliasTarget:
+  #       HostedZoneId: !GetAtt 'CallFunction.HostedZoneID'
+  #       DNSName: !GetAtt 'CallFunction.DNSName'
+     
+Outputs:
+  APIGateway:
+    Description: "API Prod stage endpoint"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  LambdaFunction:
+    Description: "Api Gateway Lambda Function"
+    Value: !GetAtt CallFunction.Arn
+  DynamoDBTable:
+    Description: "DynamoDB Table to store call records"
+    Value: !GetAtt CallsLogs.Arn
+  CallAckFunction:
+    Description: "Ack Call Function"
+    Value: !GetAtt AckCallFunction.Arn
+  IsCallAckedFunction:
+    Description: "Is Call Acked Function"
+    Value: !GetAtt IsCallAckedFunction.Arn
+  LogCallFunction:
+    Description: "Call Logger Function"
+    Value: !GetAtt LogCallFunction.Arn

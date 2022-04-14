@@ -9,13 +9,6 @@ Description: >
 Globals:
   Function:
     Timeout: 3
-  Api:
-    EndpointConfiguration: REGIONAL
-    Cors: "'*'"
-    Domain:
-      DomainName: api.debene.xyz
-      CertificateArn: arn:aws:acm:us-east-1:668984504585:certificate/90d148bc-6448-4cff-9ab7-7f1a6ad2dba2
-      EndpointConfiguration: REGIONAL
 
 Resources:
   CallsLogs:
@@ -24,12 +17,28 @@ Resources:
       AttributeDefinitions: 
         - AttributeName: ContactId
           AttributeType: S
+        - AttributeName: folio
+          AttributeType: S
+        - AttributeName: timeCallLogged
+          AttributeType: N
       KeySchema: 
         - AttributeName: ContactId
           KeyType: HASH
       ProvisionedThroughput: 
         ReadCapacityUnits: 5
         WriteCapacityUnits: 5
+      GlobalSecondaryIndexes:
+      - IndexName: folio-call
+        KeySchema:
+        - AttributeName: folio
+          KeyType: HASH
+        - AttributeName: timeCallLogged
+          KeyType: RANGE
+        Projection:
+          ProjectionType: ALL
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
 
   CallFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
@@ -53,12 +62,12 @@ Resources:
       Environment:
         Variables:
           tableName : !Ref CallsLogs
-      Events:
-        HelloWorld:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
-          Properties:
-            Path: /call
-            Method: post
+      # Events:
+      #   HelloWorld:
+      #     Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+      #     Properties:
+      #       Path: /call
+      #       Method: post
   LogCallFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
@@ -131,11 +140,11 @@ Resources:
   #       DNSName: !GetAtt 'CallFunction.DNSName'
      
 Outputs:
-  APIGateway:
-    Description: "API Prod stage endpoint"
-    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  # APIGateway:
+  #   Description: "API Prod stage endpoint"
+  #   Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
   LambdaFunction:
-    Description: "Api Gateway Lambda Function"
+    Description: "Call Function Lambda Function"
     Value: !GetAtt CallFunction.Arn
   DynamoDBTable:
     Description: "DynamoDB Table to store call records"

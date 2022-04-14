@@ -5,12 +5,13 @@ import os
 def checkCallLog(ContactId):
     ddb = boto3.client('dynamodb')
     tableName = os.environ["tableName"]
-    response = ddb.get_item(TableName=tableName,Key={ 'ContactId': {"S":str(ContactId)} },AttributesToGet=['numeroDestino','numeroOrigen','mensaje'])
+    response = ddb.get_item(TableName=tableName,Key={ 'ContactId': {"S":str(ContactId)} },AttributesToGet=['numeroDestino','numeroOrigen','mensaje','folio'])
     inputDic = {}
     if len(response["Item"]) > 0 :
         inputDic["maquina"] = response["Item"]["mensaje"]["S"]
         inputDic["numeroOrigen"] = response["Item"]["numeroOrigen"]["S"]
         inputDic["numeroDestino"] = response["Item"]["numeroDestino"]["S"]
+        inputDic["folio"] = response["Item"]["folio"]["S"]
     return inputDic
 
 def handler(event, context):
@@ -55,6 +56,7 @@ def handler(event, context):
         body["numeroDestino"] = inputDic["numeroDestino"]
         body["numeroOrigen"] = inputDic["numeroOrigen"]
         body["mensaje"] = inputDic["maquina"]
+        body["folio"] = inputDic["folio"]
         
         if inputDic["isFirstCall"] == 'yes' :  
             body["needFUP"] = "yes"

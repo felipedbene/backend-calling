@@ -22,7 +22,7 @@ def handler(event, context):
         body["acked"] = response["Item"]["acked"]["S"]
         body["ContactId"] = ContactId
         body["isFirstCall"] = "no"
-        
+        body["folio"] = extractedBody["folio"]
     
     return body
 

@@ -6,6 +6,7 @@ import datetime
 
 
 def handler(event, context):
+    
     tableName = os.environ["tableName"]
     ddb = boto3.client('dynamodb')
     body = dict()
@@ -14,6 +15,8 @@ def handler(event, context):
     numeroDestino = entrada["numeroDestino"]
     numeroOrigen = entrada["numeroOrigen"]
     mensaje = entrada["mensaje"]
+    print(entrada)
+    folio = entrada["folio"]
     timeCallLogged = datetime.datetime.timestamp(datetime.datetime.now())*1000
     ddb.put_item(TableName=tableName, 
     Item=
@@ -22,7 +25,8 @@ def handler(event, context):
         'numeroDestino':{'S':numeroDestino},
         'timeCallLogged':{'N':str(timeCallLogged)},
         'numeroOrigen':{'S':numeroOrigen},
-        'mensaje' : {'S':mensaje}, 
+        'mensaje' : {'S':mensaje},
+        'folio' : {'S':folio},
         'acked':{'S':'no'}
         } 
     )

@@ -3,12 +3,17 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   adenApp
 
-  SAM Template for adenApp for expedite maintenance reporting
+  SAM Template for adonApp for expedite maintenance reporting
   
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
   Function:
     Timeout: 3
+  Api:
+    Cors:
+      AllowMethods: "'*'"
+      AllowHeaders: "'*'"
+      AllowOrigin: "'*'"
 
 Resources:
   CallsLogs:
@@ -39,6 +44,19 @@ Resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 5
           WriteCapacityUnits: 5
+  # Folio DDB Table
+  FolioLogs:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: folio
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: folio
+          KeyType: HASH
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
 
   CallFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
@@ -125,30 +143,70 @@ Resources:
       Principal: 'connect.amazonaws.com'
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: arn:aws:connect:us-east-1:668984504585:instance/40f62289-8adf-4f1a-b934-328736bd08de
-  # ApiDNSRecord:
-  #   Type: AWS::Route53::RecordSet
-  #   Properties:
-  #     HostedZoneId: Z02456093FJS6ORLNM5I6
-  #     Name: api.debene.xyz.
-  #     Type: A
-  #     TTL: '60'
-  #     # AliasTarget:
-  #     #   HostedZoneId: Z02456093FJS6ORLNM5I6
-  #     #   DNSName: !Sub "${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com"
-  #     AliasTarget:
-  #       HostedZoneId: !GetAtt 'CallFunction.HostedZoneID'
-  #       DNSName: !GetAtt 'CallFunction.DNSName'
+    # Folio Lambda Functions
+  LogFolioFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: folioLogger.handler
+      Runtime: python3.6
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBWritePolicy :
+            TableName: !Ref FolioLogs
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Environment:
+        Variables:
+          tableName : !Ref FolioLogs
+  GetFolioDeatailAPIGW:
+    Type: AWS::Serverless::Api
+    Properties:
+      EndpointConfiguration: REGIONAL
+      StageName : Prod
+  GetFolioFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: folioGet.handler
+      Runtime: python3.6
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallsLogs
+        - DynamoDBReadPolicy:
+            TableName: !Ref FolioLogs
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Environment:
+        Variables:
+          callTableName : !Ref CallsLogs
+          folioTableName : !Ref FolioLogs
+      Events:
+        ApiEvent:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /getFolioDetails
+            Method: get
+            RestApiId:
+              Ref: GetFolioDeatailAPIGW
+
      
 Outputs:
-  # APIGateway:
-  #   Description: "API Prod stage endpoint"
-  #   Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  LambdaFunction:
+    Description: "GetFolioFunction Lambda"
+    Value: !GetAtt GetFolioFunction.Arn
   LambdaFunction:
     Description: "Call Function Lambda Function"
     Value: !GetAtt CallFunction.Arn
   DynamoDBTable:
     Description: "DynamoDB Table to store call records"
     Value: !GetAtt CallsLogs.Arn
+  DynamoDBTable:
+    Description: "DynamoDB Table to folio records"
+    Value: !GetAtt FolioLogs.Arn
   CallAckFunction:
     Description: "Ack Call Function"
     Value: !GetAtt AckCallFunction.Arn
@@ -158,3 +216,6 @@ Outputs:
   LogCallFunction:
     Description: "Call Logger Function"
     Value: !GetAtt LogCallFunction.Arn
+  LogFolioFunction:
+    Description: "Call Logger Function"
+    Value: !GetAtt LogFolioFunction.Arn

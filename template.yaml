@@ -12,7 +12,7 @@ Globals:
   Api:
     Cors:
       AllowMethods: "'*'"
-      AllowHeaders: "'*'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
       AllowOrigin: "'*'"
 
 Resources:
@@ -24,8 +24,6 @@ Resources:
           AttributeType: S
         - AttributeName: folio
           AttributeType: S
-        - AttributeName: timeCallLogged
-          AttributeType: N
       KeySchema: 
         - AttributeName: ContactId
           KeyType: HASH
@@ -37,22 +35,19 @@ Resources:
         KeySchema:
         - AttributeName: folio
           KeyType: HASH
-        - AttributeName: timeCallLogged
-          KeyType: RANGE
         Projection:
           ProjectionType: ALL
         ProvisionedThroughput:
           ReadCapacityUnits: 5
           WriteCapacityUnits: 5
-  # Folio DDB Table
-  FolioLogs:
+  EscalationMatrix:
     Type: AWS::DynamoDB::Table
     Properties: 
       AttributeDefinitions: 
-        - AttributeName: folio
+        - AttributeName: NumeroDestino
           AttributeType: S
       KeySchema: 
-        - AttributeName: folio
+        - AttributeName: NumeroDestino
           KeyType: HASH
       ProvisionedThroughput: 
         ReadCapacityUnits: 5
@@ -63,7 +58,7 @@ Resources:
     Properties:
       CodeUri: src/
       Handler: makeCall.handler
-      Runtime: python3.6
+      Runtime: python3.8
       Policies: 
         - AWSLambdaExecute
         - DynamoDBReadPolicy:
@@ -75,29 +70,46 @@ Resources:
             - connect:StartOutboundVoiceContact
             Resource: '*'
       Architectures:
-        - x86_64
+        - arm64
       MemorySize: 160
       Environment:
         Variables:
           tableName : !Ref CallsLogs
-      # Events:
-      #   HelloWorld:
-      #     Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
-      #     Properties:
-      #       Path: /call
-      #       Method: post
+  EscalationCallFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: makeEscalationCall.handler
+      Runtime: python3.8
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBWritePolicy:
+            TableName: !Ref CallsLogs
+        - Statement:
+          - Sid: MakeConnectCall
+            Effect: Allow
+            Action:
+            - connect:StartOutboundVoiceContact
+            Resource: '*'
+        
+      Architectures:
+        - arm64
+      MemorySize: 128
+      Environment:
+        Variables:
+          tableName : !Ref CallsLogs
   LogCallFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       CodeUri: src/
       Handler: callLogger.handler
-      Runtime: python3.6
+      Runtime: python3.8
       Policies: 
         - AWSLambdaExecute
         - DynamoDBWritePolicy :
             TableName: !Ref CallsLogs
       Architectures:
-        - x86_64
+        - arm64
       MemorySize: 128
       Environment:
         Variables:
@@ -107,13 +119,13 @@ Resources:
     Properties:
       CodeUri: src/
       Handler: callAcker.handler
-      Runtime: python3.6
+      Runtime: python3.8
       Policies: 
         - AWSLambdaExecute
         - DynamoDBWritePolicy :
             TableName: !Ref CallsLogs
       Architectures:
-        - x86_64
+        - arm64
       MemorySize: 128
       Environment:
         Variables:
@@ -123,13 +135,13 @@ Resources:
     Properties:
       CodeUri: src/
       Handler: callAcked.handler
-      Runtime: python3.6
+      Runtime: python3.8
       Policies: 
         - AWSLambdaExecute
         - DynamoDBReadPolicy :
             TableName: !Ref CallsLogs
       Architectures:
-        - x86_64
+        - arm64
       MemorySize: 128
       Environment:
         Variables:
@@ -149,41 +161,45 @@ Resources:
     Properties:
       CodeUri: src/
       Handler: folioLogger.handler
-      Runtime: python3.6
+      Runtime: python3.8
       Policies: 
         - AWSLambdaExecute
         - DynamoDBWritePolicy :
-            TableName: !Ref FolioLogs
+            TableName: !Ref CallsLogs
       Architectures:
-        - x86_64
+        - arm64
       MemorySize: 128
       Environment:
         Variables:
-          tableName : !Ref FolioLogs
+          tableName : !Ref CallsLogs
+          
   GetFolioDeatailAPIGW:
     Type: AWS::Serverless::Api
     Properties:
       EndpointConfiguration: REGIONAL
       StageName : Prod
+      Cors:
+        AllowMethods: "'POST, GET, OPTIONS'"
+        AllowHeaders: "'X-Forwarded-For,Content-Type'"
+        AllowOrigin: "'*'"
+        MaxAge: "'600'"
   GetFolioFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       CodeUri: src/
       Handler: folioGet.handler
-      Runtime: python3.6
+      Runtime: python3.8
       Policies: 
         - AWSLambdaExecute
         - DynamoDBReadPolicy:
             TableName: !Ref CallsLogs
-        - DynamoDBReadPolicy:
-            TableName: !Ref FolioLogs
       Architectures:
-        - x86_64
+        - arm64
       MemorySize: 128
       Environment:
         Variables:
-          callTableName : !Ref CallsLogs
-          folioTableName : !Ref FolioLogs
+          tableName : !Ref CallsLogs
+          indexName : 'folio-call'
       Events:
         ApiEvent:
           Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
@@ -192,30 +208,79 @@ Resources:
             Method: get
             RestApiId:
               Ref: GetFolioDeatailAPIGW
-
-     
-Outputs:
-  LambdaFunction:
-    Description: "GetFolioFunction Lambda"
-    Value: !GetAtt GetFolioFunction.Arn
-  LambdaFunction:
-    Description: "Call Function Lambda Function"
-    Value: !GetAtt CallFunction.Arn
-  DynamoDBTable:
-    Description: "DynamoDB Table to store call records"
-    Value: !GetAtt CallsLogs.Arn
-  DynamoDBTable:
-    Description: "DynamoDB Table to folio records"
-    Value: !GetAtt FolioLogs.Arn
-  CallAckFunction:
-    Description: "Ack Call Function"
-    Value: !GetAtt AckCallFunction.Arn
-  IsCallAckedFunction:
-    Description: "Is Call Acked Function"
-    Value: !GetAtt IsCallAckedFunction.Arn
-  LogCallFunction:
-    Description: "Call Logger Function"
-    Value: !GetAtt LogCallFunction.Arn
-  LogFolioFunction:
-    Description: "Call Logger Function"
-    Value: !GetAtt LogFolioFunction.Arn
+  CloseFolioFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: folioClose.handler
+      Runtime: python3.8
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBWritePolicy:
+            TableName: !Ref CallsLogs
+      Architectures:
+        - arm64
+      MemorySize: 128
+      Environment:
+        Variables:
+          tableName : !Ref CallsLogs
+          indexName : 'folio-call'
+      Events:
+        ApiEvent:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /closeFolioDetails
+            Method: post
+            RestApiId:
+              Ref: GetFolioDeatailAPIGW
+              
+  NotificarLlegadaFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: folioNotifica.handler
+      Runtime: python3.8
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBWritePolicy:
+            TableName: !Ref CallsLogs
+        - Statement:
+          - Sid: StartExecutionPolicy
+            Effect: Allow
+            Action:
+            - states:StartExecution
+            Resource: '*'
+      Architectures:
+        - arm64
+      MemorySize: 128
+      Environment:
+        Variables:
+          tableName : !Ref CallsLogs
+          escalationMachine : "arn:aws:states:us-east-1:668984504585:stateMachine:makeEscalation"
+      Events:
+        ApiEvent:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /notitificaLlegada
+            Method: get
+            RestApiId:
+              Ref: GetFolioDeatailAPIGW
+  checkEscalateFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: checkEscalate.handler
+      Runtime: python3.8
+      Policies: 
+        - AWSLambdaExecute
+        - DynamoDBReadPolicy :
+            TableName: !Ref CallsLogs
+        - DynamoDBReadPolicy :
+            TableName: !Ref EscalationMatrix
+      Architectures:
+        - arm64
+      MemorySize: 128
+      Environment:
+        Variables:
+          callTableName : !Ref CallsLogs
+          escalationTableName : !Ref EscalationMatrix

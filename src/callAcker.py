@@ -14,12 +14,12 @@ def handler(event, context):
     
     print(ContactId)
     
-    timeCallAcked = datetime.datetime.timestamp(datetime.datetime.now())*1000
+    timeCallAcked = str(datetime.datetime.timestamp(datetime.datetime.now()))
 
     cont = dict()
     cont["ContactId"]=ContactId
     response = ddb.update_item(Key={ 'ContactId': {"S":str(ContactId)} },
-    AttributeUpdates={'acked': {'Value': {'S' :'yes'} }},
+    AttributeUpdates={'acked': {'Value': {'S' :'yes'} }, 'timeCallAcked' :  {'Value' : { 'S' : timeCallAcked }} },
     TableName=tableName)
 
 

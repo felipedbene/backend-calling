@@ -17,13 +17,13 @@ def handler(event, context):
     mensaje = entrada["mensaje"]
     print(entrada)
     folio = entrada["folio"]
-    timeCallLogged = datetime.datetime.timestamp(datetime.datetime.now())*1000
+    timeCallLogged = str(datetime.datetime.timestamp(datetime.datetime.now()))
     ddb.put_item(TableName=tableName, 
     Item=
         {'ContactId':{'S':ContactId},
         'event':{'S':'callPlaced'},
         'numeroDestino':{'S':numeroDestino},
-        'timeCallLogged':{'N':str(timeCallLogged)},
+        'timeCallLogged':{'S':str(timeCallLogged)},
         'numeroOrigen':{'S':numeroOrigen},
         'mensaje' : {'S':mensaje},
         'folio' : {'S':folio},
@@ -45,17 +45,6 @@ def handler(event, context):
         },
         'body': json.dumps(body)
     }
-    # except :
-    #     body["status"] = "kaput"
-    #     return {
-    #         'statusCode': 500,
-    #         'headers': {
-    #             'Access-Control-Allow-Headers': 'Content-Type',
-    #             'Access-Control-Allow-Origin': '*',
-    #             'Access-Control-Allow-Methods': 'OPTIONS,POST'
-    #         },
-    #         'body': json.dumps(body)
-    #     }
     
     
     
